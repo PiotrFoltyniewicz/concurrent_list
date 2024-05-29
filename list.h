@@ -4,8 +4,6 @@ struct TList {
 	int maxSize;
   int currentSize;
   void** items;
-  int headIndex;
-  int tailIndex; 
 };
 typedef struct TList TList;
 
