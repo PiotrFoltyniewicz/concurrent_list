@@ -1,9 +1,12 @@
-#include <semaphore.h>
+#include <pthread.h>
 
 struct TList {
 	int maxSize;
   int currentSize;
   void** items;
+  pthread_mutex_t mutex;
+  pthread_cond_t listFull;
+  pthread_cond_t listEmpty;
 };
 typedef struct TList TList;
 
