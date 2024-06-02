@@ -20,8 +20,8 @@ TList* createList(int s){
   list->maxSize = s;
   list->currentSize = 0;
   pthread_mutex_init(&list->mutex, NULL);
-  pthread_cond_init(&list->listFull, NULL);
-  pthread_cond_init(&list->listEmpty, NULL);
+  pthread_cond_init(&list->listNotFull, NULL);
+  pthread_cond_init(&list->listNotEmpty, NULL);
   return list;
 }
 
@@ -34,8 +34,8 @@ void destroyList(TList *lst) {
     pthread_mutex_lock(&lst->mutex);
     free(lst->items);
     pthread_mutex_unlock(&lst->mutex);
-    pthread_cond_destroy(&lst->listFull);
-    pthread_cond_destroy(&lst->listEmpty);
+    pthread_cond_destroy(&lst->listNotFull);
+    pthread_cond_destroy(&lst->listNotEmpty);
     pthread_mutex_destroy(&lst->mutex);
     free(lst);
     lst = NULL;
@@ -50,11 +50,13 @@ void putItem(TList *lst, void *itm){
   pthread_mutex_lock(&lst->mutex);
   while(lst->currentSize >= lst->maxSize)
   {
-    pthread_cond_wait(&lst->listFull, &lst->mutex);
+    // debug message
+    printf("Cannot put item, because list is full\n");
+    pthread_cond_wait(&lst->listNotFull, &lst->mutex);
   }
   lst->items[lst->currentSize] = itm;
   lst->currentSize++;
-  pthread_cond_signal(&lst->listFull);
+  pthread_cond_signal(&lst->listNotEmpty);
   pthread_mutex_unlock(&lst->mutex);
 }
 
@@ -67,11 +69,9 @@ void* getItem(TList *lst){
     return NULL;
   }
   pthread_mutex_lock(&lst->mutex);
-  if(lst->currentSize == 0){
-    // debug message
+  while(lst->currentSize == 0){
     printf("Cannot get item, because list is empty\n");
-    pthread_mutex_unlock(&lst->mutex);
-    return NULL;
+    pthread_cond_wait(&lst->listNotEmpty, &lst->mutex);
   }
 
   void* foundItem = lst->items[0];
@@ -80,6 +80,9 @@ void* getItem(TList *lst){
   }
   lst->items[lst->currentSize - 1] = NULL;
   lst->currentSize--;
+  if(lst->currentSize < lst->maxSize){
+    pthread_cond_signal(&lst->listNotFull);
+  }
   pthread_mutex_unlock(&lst->mutex);
   return foundItem;
 }
@@ -91,15 +94,16 @@ void* popItem(TList *lst){
     return NULL;
   }
   pthread_mutex_lock(&lst->mutex);
-  if(lst->currentSize == 0){
-    // debug message
+  while(lst->currentSize == 0){
     printf("Cannot pop item, because list is empty\n");
-    pthread_mutex_unlock(&lst->mutex);
-    return NULL;
+    pthread_cond_wait(&lst->listNotEmpty, &lst->mutex);
   }
   void* foundItem = lst->items[lst->currentSize - 1];
   lst->items[lst->currentSize - 1] = NULL;
   lst->currentSize--;
+  if(lst->currentSize < lst->maxSize){
+    pthread_cond_signal(&lst->listNotFull);
+  }
   pthread_mutex_unlock(&lst->mutex);
   return foundItem;
 }
@@ -111,6 +115,10 @@ int removeItem(TList *lst, void *itm){
     return 0;
   }
   pthread_mutex_lock(&lst->mutex);
+  while(lst->currentSize == 0){
+    printf("Cannot remove item, because list is empty\n");
+    pthread_cond_wait(&lst->listNotEmpty, &lst->mutex);
+  }
   int removeFlag = 0;
   for(int i = 0; i < lst->currentSize; i++){
     if(itm == lst->items[i] && !removeFlag){
@@ -124,6 +132,9 @@ int removeItem(TList *lst, void *itm){
   if(removeFlag){
     lst->items[lst->currentSize - 1] = NULL;
     lst->currentSize--;
+    if(lst->currentSize < lst->maxSize){
+      pthread_cond_signal(&lst->listNotFull);
+    }
   }
   pthread_mutex_unlock(&lst->mutex);
   return removeFlag;

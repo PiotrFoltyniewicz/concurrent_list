@@ -5,8 +5,8 @@ struct TList {
   int currentSize;
   void** items;
   pthread_mutex_t mutex;
-  pthread_cond_t listFull;
-  pthread_cond_t listEmpty;
+  pthread_cond_t listNotFull;
+  pthread_cond_t listNotEmpty;
 };
 typedef struct TList TList;
 
