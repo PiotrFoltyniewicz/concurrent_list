@@ -4,39 +4,73 @@
 #include <stdio.h>
 #include <string.h>
  
-TList* createList(int s){
+TList* createList(int s) {
   TList* list = malloc(sizeof(TList));
-  if(!list){
-    // debug message
-    printf("Failed to allocate memory for a new list\n");
+  if(!list) {
+    perror("Failed to allocate memory for a new list");
     return NULL;
   }
-  list->items = malloc(s * sizeof(char * ));
-  if(!list->items){
-    // debug message
-    printf("Failed to allocate memory for a new list\n");
+
+  list->items = malloc(s * sizeof(char *));
+  if(!list->items) {
+    perror("Failed to allocate memory for list items");
+    free(list);
     return NULL;
   }
+
   list->maxSize = s;
   list->currentSize = 0;
-  pthread_mutex_init(&list->mutex, NULL);
-  pthread_cond_init(&list->listNotFull, NULL);
-  pthread_cond_init(&list->listNotEmpty, NULL);
+
+  if(pthread_mutex_init(&list->mutex, NULL) != 0) {
+    perror("Failed to initialize mutex");
+    free(list->items);
+    free(list);
+    return NULL;
+  }
+
+  if(pthread_cond_init(&list->listNotFull, NULL) != 0) {
+    perror("Failed to initialize condition variable listNotFull");
+    pthread_mutex_destroy(&list->mutex);
+    free(list->items);
+    free(list);
+    return NULL;
+  }
+
+  if(pthread_cond_init(&list->listNotEmpty, NULL) != 0) {
+    perror("Failed to initialize condition variable listNotEmpty");
+    pthread_cond_destroy(&list->listNotFull);
+    pthread_mutex_destroy(&list->mutex);
+    free(list->items);
+    free(list);
+    return NULL;
+  }
+
   return list;
 }
 
 void destroyList(TList *lst) {
-    if (lst == NULL) {
+    if(lst == NULL) {
         // debug message
         printf("Cannot destroy the list, because list doesn't exist\n");
         return;
     }
+
     pthread_mutex_lock(&lst->mutex);
     free(lst->items);
     pthread_mutex_unlock(&lst->mutex);
-    pthread_cond_destroy(&lst->listNotFull);
-    pthread_cond_destroy(&lst->listNotEmpty);
-    pthread_mutex_destroy(&lst->mutex);
+
+    if(pthread_cond_destroy(&lst->listNotFull) != 0){
+      perror("Failed to destroy conditional variable listNotFull");
+    }
+
+    if(pthread_cond_destroy(&lst->listNotEmpty) != 0){
+      perror("Failed to destroy conditional variable listNotEmpty");
+    }
+
+    if(pthread_mutex_destroy(&lst->mutex) != 0){
+      perror("Failed to destroy mutex");
+    }
+
     free(lst);
     lst = NULL;
 }
@@ -47,20 +81,22 @@ void putItem(TList *lst, void *itm){
     printf("Cannot put item, because list doesn't exist\n");
     return;
   }
+
   pthread_mutex_lock(&lst->mutex);
+
   while(lst->currentSize >= lst->maxSize)
   {
     // debug message
     printf("Cannot put item, because list is full\n");
     pthread_cond_wait(&lst->listNotFull, &lst->mutex);
   }
+
   lst->items[lst->currentSize] = itm;
   lst->currentSize++;
+
   pthread_cond_signal(&lst->listNotEmpty);
   pthread_mutex_unlock(&lst->mutex);
 }
-
-// add condition variable
 
 void* getItem(TList *lst){
   if(!lst){
@@ -68,7 +104,9 @@ void* getItem(TList *lst){
     printf("Cannot get item, because list doesn't exist\n");
     return NULL;
   }
+
   pthread_mutex_lock(&lst->mutex);
+
   while(lst->currentSize == 0){
     printf("Cannot get item, because list is empty\n");
     pthread_cond_wait(&lst->listNotEmpty, &lst->mutex);
@@ -78,11 +116,14 @@ void* getItem(TList *lst){
   for(int i = 1; i < lst->currentSize; i++){
     lst->items[i-1] = lst->items[i];
   }
+
   lst->items[lst->currentSize - 1] = NULL;
   lst->currentSize--;
+
   if(lst->currentSize < lst->maxSize){
     pthread_cond_signal(&lst->listNotFull);
   }
+
   pthread_mutex_unlock(&lst->mutex);
   return foundItem;
 }
@@ -93,17 +134,22 @@ void* popItem(TList *lst){
     printf("Cannot pop item, because list doesn't exist\n");
     return NULL;
   }
+
   pthread_mutex_lock(&lst->mutex);
+
   while(lst->currentSize == 0){
     printf("Cannot pop item, because list is empty\n");
     pthread_cond_wait(&lst->listNotEmpty, &lst->mutex);
   }
+
   void* foundItem = lst->items[lst->currentSize - 1];
   lst->items[lst->currentSize - 1] = NULL;
   lst->currentSize--;
+
   if(lst->currentSize < lst->maxSize){
     pthread_cond_signal(&lst->listNotFull);
   }
+
   pthread_mutex_unlock(&lst->mutex);
   return foundItem;
 }
@@ -114,12 +160,15 @@ int removeItem(TList *lst, void *itm){
     printf("Cannot remove item, because list doesn't exist\n");
     return 0;
   }
+
   pthread_mutex_lock(&lst->mutex);
   while(lst->currentSize == 0){
     printf("Cannot remove item, because list is empty\n");
     pthread_cond_wait(&lst->listNotEmpty, &lst->mutex);
   }
+
   int removeFlag = 0;
+
   for(int i = 0; i < lst->currentSize; i++){
     if(itm == lst->items[i] && !removeFlag){
       removeFlag = 1;
@@ -129,6 +178,7 @@ int removeItem(TList *lst, void *itm){
       lst->items[i-1] = lst->items[i];
     }
   }
+
   if(removeFlag){
     lst->items[lst->currentSize - 1] = NULL;
     lst->currentSize--;
@@ -136,6 +186,7 @@ int removeItem(TList *lst, void *itm){
       pthread_cond_signal(&lst->listNotFull);
     }
   }
+
   pthread_mutex_unlock(&lst->mutex);
   return removeFlag;
 }
@@ -146,9 +197,11 @@ int getCount(TList *lst){
     printf("Cannot get count, because list doesn't exist\n");
     return 0;
   }
+
   pthread_mutex_lock(&lst->mutex);
   int count = lst->currentSize;
   pthread_mutex_unlock(&lst->mutex);
+
   return count;
 }
 
@@ -158,8 +211,17 @@ void setMaxSize(TList *lst, int s){
     printf("Cannot set max size, because list doesn't exist\n");
     return;
   }
+
   pthread_mutex_lock(&lst->mutex);
   lst->maxSize = s;
+  void** temp = realloc(lst->items, sizeof(void *) * s);
+  if(!temp){
+    perror("Failed to reallocate memory for items");
+  }else{
+    lst->items = temp;
+    lst->maxSize = s;
+  }
+
   pthread_mutex_unlock(&lst->mutex);
 }
 
@@ -169,14 +231,17 @@ void appendItems(TList *lst, TList *lst2){
     printf("Cannot append items, because one of the lists (or both) doesn't exist\n");
     return;
   }
+
   pthread_mutex_lock(&lst->mutex);
-  // appending items until lst reaches max size, lst2 remains unchanged
+  int newSize = lst->currentSize + lst2->currentSize;
+
+  if(newSize > lst->maxSize){
+    setMaxSize(lst, newSize);
+  }
+
   for(int i = 0; i < lst2->currentSize; i++){
-    if(lst->currentSize >= lst->maxSize){
-      printf("List 1 has reached full capacity and not all items from list2 has been appended\n");
-      break;
-    }
-    putItem(lst, lst2->items[i]);
+    lst->items[lst->currentSize] = lst->items[i];
+    lst->currentSize++;
   }
   pthread_mutex_unlock(&lst->mutex);
 }
@@ -187,10 +252,12 @@ void showList(TList *lst){
     printf("Cannot show the list, because it doesn't exist\n");
     return;
   }
+
   pthread_mutex_lock(&lst->mutex);
   for(int i = 0; i < lst->currentSize; i++){
     printf("%p ", lst->items[i]);
   }
+
   printf("\n");
   pthread_mutex_unlock(&lst->mutex);
 }
