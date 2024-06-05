@@ -77,7 +77,7 @@ void* presenter(void* arg){
 }
 
 int main(){
-
+    /*
     TList* list = createList(6);
     TList* list2 = createList(10);
     pthread_t th1, th2, th3, th4, th5, th6, th7, th8;
@@ -114,7 +114,23 @@ int main(){
     printf("Count: %d\n", getCount(list));
     destroyList(list);
     destroyList(list2);
-    free(nums);
     free(args);
+    */
+    TList* list = createList(4);
+    TList* list2 = createList(3);
+    debugMessages(list, 1);
+    debugMessages(list2, 1);
+    int items[6] = {1,2,3,4,5,6};
+    putItem(list, &items[0]);
+    putItem(list, &items[1]);
+    putItem(list, &items[2]);
+    putItem(list2, &items[3]);
+    putItem(list2, &items[4]);
+    putItem(list2, &items[5]);
+    showList(list);
+    showList(list2);
+    appendItems(list, list2);
+    showList(list);
+    showList(list2);
     return 0;
 }
